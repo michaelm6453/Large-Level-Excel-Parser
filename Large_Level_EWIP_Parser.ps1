@@ -90,13 +90,14 @@ function Compare-Arrays {
 
     param (
         [array]$Array1, # entire EWIP pc list
-        [array]$Array2  #list of pc names to search for
+        [array]$Array2  # list of pc names to search for
     )
     
     $newArray = @()
 
     foreach ($obj2 in $Array2) {
-        $matchedObj = $Array1 | Where-Object { $_.WORKSTATION_NAME -ceq $obj2.'PC name' }
+        $obj2NameNormalized = $obj2.'PC name'.Trim().Normalize()
+        $matchedObj = $Array1 | Where-Object { $_.WORKSTATION_NAME.Trim().Normalize() -eq $obj2NameNormalized }
         if ($matchedObj) {
             $newArray += $matchedObj
         }
@@ -106,7 +107,8 @@ function Compare-Arrays {
 }
 
 function Name-Not-Found {
-# Function to see 
+    # Function to check for names not found
+
     param (
         [array]$Array1, # list of pc names found (less than pc names to search for)
         [array]$Array2  # list of pc names to search for
@@ -115,11 +117,10 @@ function Name-Not-Found {
     $newArray = @()
 
     foreach ($obj2 in $Array2) {  
-    
         $found_PC = $false
+        $obj2NameNormalized = $obj2.'PC name'.Trim().Normalize()
 
-
-        $matchedObj = $Array1 | Where-Object { $_.WORKSTATION_NAME -eq $obj2.'PC name' }
+        $matchedObj = $Array1 | Where-Object { $_.WORKSTATION_NAME.Trim().Normalize() -eq $obj2NameNormalized }
         if ($matchedObj) {
             $found_PC = $true
         }
@@ -131,6 +132,7 @@ function Name-Not-Found {
 
     return $newArray
 }
+
 
 [int]$Global:number_entered
 
