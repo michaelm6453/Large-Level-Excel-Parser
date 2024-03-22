@@ -1,30 +1,85 @@
 <#
 .SYNOPSIS
-    EWIP parser script for parsing Excel files and filtering specific columns.
+    The script interacts with the user to process either 
+    a) a large EWIP report or 
+    b) compare PC names from Excel files, converting them to uppercase for matching. 
+
+    It then exports the matched and unmatched PC data to separate CSV files.
+
 .DESCRIPTION
-    This PowerShell script is designed to parse an Excel file (.xlsx) by filtering specific columns and displaying the results in a table format. 
+    The main code section prompts the user for input based on the selected operation (processing a report or comparing PC names), 
+    reads file paths, processes the data accordingly, and exports the results to specified locations.
 .PARAMETER FilePath
     Specifies the path of the Excel file to be parsed.
 .PARAMETER SheetName
     Specifies the name of the sheet within the Excel file to be parsed (optional).
-.EXAMPLE
-    $excelPath = "C:\Path\To\Your\File.xlsx"
-    Import-Excel -FilePath $excelPath -SheetName "Sheet1"
+.PARAMETER lower_case_PC_list
+    Specifies a list of PC names in lowercase to be converted to uppercase.
+.PARAMETER Array1
+    Specifies the first array to be compared.
+.PARAMETER Array2
+    Specifies the second array to be compared.
+.PARAMETER excelPath
+    Specifies the path of the Excel file to be processed in the Filter-Large-Report function.
+.PARAMETER excelPathExport
+    Specifies the path where the processed Excel file will be exported.
+.PARAMETER user_file
+    Specifies the path of the Excel file containing a list of PC names.
+.PARAMETER EWIP_file
+    Specifies the path of the Excel file containing all PC information for comparison.
+.PARAMETER path_matches
+    Specifies the path where the found PC information will be exported.
+.PARAMETER path_no_matches
+    Specifies the path where the not-found PC information will be exported.
 .NOTES
+    Author: Michael Morra (3/21/2024)
     This script requires Excel to be installed on the system.
-    The Import-Excel function converts the Excel file to CSV and imports the data.
-    The script then filters the data by removing rows where any of the specified properties are null.
-    Finally, it displays the filtered data in a table format and exports it to a CSV file.
+.EXAMPLE
+
+    # Program prompts you to enter 1 or 2 (1 is for large report parsing, 2 is for comparing pc list to ewip report)
+
+    1 
+
+    # Program prompts you to enter file path to excel file to parse and another prompt to an export location
+
+
+    C:\Path\To\Your\EWIP\File.xlsx
+    C:\Path\To\Your\Export\File.xlsx
+    
+    Can easily change code to include sheet name
+    ex: Import-Excel -FilePath $excelPath -SheetName "Sheet1"
 #>
 
-# FUNCTIONS 
 
+# FUNCTIONS
+
+<# 
+Import-Excel: Imports an Excel file and converts it to CSV format.
+
+FindSheet: Finds a specific sheet within a workbook by name.
+
+SetActiveSheet: Activates a specified sheet within a workbook.
+
+Convert-To-Upper: Converts strings in an array to uppercase.
+
+Compare-Arrays: Compares arrays based on matching attributes.
+
+Name-Not-Found: Checks for names not found in a list of PC names.
+
+Welcome-Message: Displays a welcome message and prompts the user for input.
+
+Filter-Large-Report: Processes a large EWIP report, sorts data, and exports it to a new Excel file.
+
+#>
+
+
+# Function to import an Excel file and convert it to CSV
 function Import-Excel([string]$FilePath, [string]$SheetName = "")
 {
     $csvFile = Join-Path $env:temp ("{0}.csv" -f (Get-Item -path $FilePath).BaseName)
     if (Test-Path -path $csvFile) { Remove-Item -path $csvFile }
 
-    # convert Excel file to CSV file
+    # Convert Excel file to CSV file
     $xlCSVType = 6 
     $excelObject = New-Object -ComObject Excel.Application  
     $excelObject.Visible = $false 
@@ -34,22 +89,20 @@ function Import-Excel([string]$FilePath, [string]$SheetName = "")
     $workbookObject.Saved = $true
     $workbookObject.Close()
 
-     # cleanup 
-    [System.Runtime.Interopservices.Marshal]::ReleaseComObject($workbookObject) |
-        Out-Null
+    # Cleanup
+    [System.Runtime.Interopservices.Marshal]::ReleaseComObject($workbookObject) | Out-Null
     $excelObject.Quit()
-    [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excelObject) |
-        Out-Null
+    [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excelObject) | Out-Null
     [System.GC]::Collect()
     [System.GC]::WaitForPendingFinalizers()
 
-    # now import and return the data 
+    # Import and return the data 
     Import-Csv -path $csvFile
 }
 
+# Function to find a sheet by name within a workbook
 function FindSheet([Object]$workbook, [string]$name)
-{   # FindSheet function locates the sheet number based on the provided sheet name within a workbook.
-
+{
     $sheetNumber = 0
     for ($i=1; $i -le $workbook.Sheets.Count; $i++) {
         if ($name -eq $workbook.Sheets.Item($i).Name) { $sheetNumber = $i; break }
@@ -57,37 +110,33 @@ function FindSheet([Object]$workbook, [string]$name)
     return $sheetNumber
 }
 
+# Function to activate a specific sheet within a workbook by name
 function SetActiveSheet([Object]$workbook, [string]$name)
 {
-    # SetActiveSheet function activates a specific sheet within a workbook based on the provided sheet name.
-
     if (!$name) { return }
     $sheetNumber = FindSheet $workbook $name
     if ($sheetNumber -gt 0) { $workbook.Worksheets.Item($sheetNumber).Activate() }
     return ($sheetNumber -gt 0)
 }
 
+# Function to convert strings in an array to uppercase
 function Convert-To-Upper{
-
     param(
-    [array]$lower_case_PC_list # list with lowercase PC names
+        [array]$lower_case_PC_list # list with lowercase PC names
     )
 
     $newArray = @()
     
     foreach ($obj in $lower_case_PC_list){
-        
         $obj.'PC name' = $obj.'PC name'.toUpper() 
         $newArray += $obj
     }
 
     return $newArray
-
 }
 
+# Function to compare arrays and create a new array based on matching attributes
 function Compare-Arrays {
-    # Function to compare and create a new array
-
     param (
         [array]$Array1, # entire EWIP pc list
         [array]$Array2  # list of pc names to search for
@@ -106,9 +155,8 @@ function Compare-Arrays {
     return $newArray
 }
 
+# Function to check for names not found
 function Name-Not-Found {
-    # Function to check for names not found
-
     param (
         [array]$Array1, # list of pc names found (less than pc names to search for)
         [array]$Array2  # list of pc names to search for
@@ -133,34 +181,23 @@ function Name-Not-Found {
     return $newArray
 }
 
-
-[int]$Global:number_entered
-
+# Function to display a welcome message and prompt the user for input
 function Welcome-Message{
     Clear-Host
 
-    # User enters a filepath to the .xlsx file from their computer 
     Write-Host "Welcome to the Excel Parser. This program was written by Michael Morra."
     
-    [bool]$invalid_input = $true
-    
-    # Can easily add another prompt to ask for output path
-
+    $invalid_input = $true
 
     while($invalid_input){
+        $Global:number_entered = Read-Host -Prompt "Press 1 to process a large EWIP report. Press 2 to get information based on PC name"
     
-    $Global:number_entered = Read-Host -Prompt "Press 1 to process a large EWIP report. Press 2 to get information based on PC name"
-    
-    
-    if($Global:number_entered -eq 1 -or $Global:number_entered -eq 2){
-        $invalid_input=$false
+        if($Global:number_entered -eq 1 -or $Global:number_entered -eq 2){
+            $invalid_input=$false
         }
-    else {
-    
-        Write-Host "Please enter a valid selection..."
-    
+        else {
+            Write-Host "Please enter a valid selection..."
         }
-    
     }
     
     Clear-Host
